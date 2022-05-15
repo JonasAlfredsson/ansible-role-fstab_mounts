@@ -10,14 +10,54 @@
   fail:
     msg: "{{ item.stderr }}"
   when: >
+    (not ansible_check_mode)
+    and
     (item.rc != 0)
     and not
     ("already mapped or mounted" in item.stderr_lines|last)
   with_items: "{{ unlock_drives.results }}"
   listen: Unlock encrypted drives
 
+# If mergerfs already has a fuse filesystem mounted on the target mount
+# point then the -a command will fail. To simplify things we will first ignore
+# this type of mount completely, and then handle them separately.
 - name: Mount drives
   become: true
   args:
     warn: false
-  shell: mount -a
+  shell: mount -a -t nofuse.mergerfs
+
+# After the above command we try to mount all pooled drives, but as the code
+# is written right now we cannot identify if anything has changed in regards
+# to the mount options...
+- name: Mount pooled drives
+  become: true
+  shell: "mount --target {{ item.mount_point }}"
+  args:
+    warn: false
+  changed_when: mount_pooled_drives.rc == 0
+  failed_when: >
+    (not ansible_check_mode)
+    and
+    (mount_pooled_drives.rc != 0)
+    and not
+    ("fuse: mountpoint is not empty" in mount_pooled_drives.stderr_lines|first)
+  with_items: "{{ mounts_pooled }}"
+  when: mounts_pooled is defined
+  register: mount_pooled_drives
+  listen: Mount drives
+
+# ...and since it is not trivial to update a mergerfs fuse mount point during
+# runtime we just notify the user that it is much simpler to just reboot in
+# case something has changed. Read more here:
+# https://github.com/trapexit/mergerfs#runtime-config
+- name: Verify all pooled drives could be mounted
+  fail:
+    msg: "Pooled mount point '{{ item.item.mount_point }}' is not empty; please reboot in case you know something has changed"
+  when: >
+    ("fuse: mountpoint is not empty" in item.stderr_lines|first)
+  loop: "{{ mount_pooled_drives.results }}"
+  loop_control:
+    label: "{'name': '{{ item.item.name }}', 'mount_point': '{{ item.item.mount_point }}'}"
+  ignore_errors: true
+  listen: Mount drives
