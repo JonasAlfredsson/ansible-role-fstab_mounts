@@ -12,7 +12,7 @@
 
 ###### Boot Mounts - Mount points necessary for the system to boot
 {% for mount in mounts_boot %}
-UUID={{ mount.uuid }} {{ mount.mount_point }} {{ mount.type }} {{ mount.options }} {{ mount.dump }} {{ mount.pass }}
+{{ mount.device }} {{ mount.mount_point }} {{ mount.type }} {{ mount.options }} {{ mount.dump }} {{ mount.pass }}
 {% endfor %}
 
 {% if mounts_cryptdisks is defined %}

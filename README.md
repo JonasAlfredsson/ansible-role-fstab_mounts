@@ -109,13 +109,13 @@ entries for any other mounts:
 
 ```yaml
 mounts_boot:
-  - uuid: "88f0236b-620a-456e-a4a6-1b5c84996b5c"
+  - device: "UUID=88f0236b-620a-456e-a4a6-1b5c84996b5c"
     mount_point: "/"
     type: "ext4"
     options: "errors=remount-ro"
     dump: 0
     pass: 1
-  - uuid: "b8d210eb-d186-405f-bc42-a55cbe069a27"
+  - device: "UUID=b8d210eb-d186-405f-bc42-a55cbe069a27"
     mount_point: "none"
     type: "swap"
     options: "sw"
