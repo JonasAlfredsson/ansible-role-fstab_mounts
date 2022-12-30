@@ -27,7 +27,8 @@ UUID={{ mounts_cryptdisks.uuid }} {{ mounts_cryptdisks.mount_point }} {{ mounts_
 {% if mounts_normal is defined and mounts_normal|length > 0 %}
 ###### Normal Mounts - Noting fancy about these drives
 {% for mount in mounts_normal %}
-{% if mount.comment is defined %}# {{ mount.comment }}{% endif %}
+{% if mount.comment is defined %}# {{ mount.comment }}
+{% endif %}
 UUID={{ mount.uuid }} {{ mount.mount_point }} {{ mount.type | default('ext4') }} {{ mount.options | default('defaults,nofail') }} {{ mount.dump | default('0') }} {{ mount.pass | default('2') }}
 {% endfor %}
 {% endif %}
@@ -35,15 +36,19 @@ UUID={{ mount.uuid }} {{ mount.mount_point }} {{ mount.type | default('ext4') }}
 {% if mounts_encrypted is defined and mounts_encrypted|length > 0 %}
 ###### Encrypted Mounts - The mount points for the decrypted drives
 {% for mount in mounts_encrypted %}
-{% if mount.fstab.comment is defined %}# {{ mount.fstab.comment }}{% endif %}
-/dev/mapper/{{ mount.name | default(mount.uuid) }} {{ mount.mount_point }} {{ mount.fstab.type | default('ext4') }} {{ mount.fstab.options | default('defaults,nofail') }} {{ mount.fstab.dump | default('0') }} {{ mount.fstab.pass | default('2') }}
+{% if mount.fstab.mount_point is defined %}
+{% if mount.fstab.comment is defined %}# {{ mount.fstab.comment }}
+{% endif %}
+/dev/mapper/{{ mount.name | default(mount.uuid) }} {{ mount.fstab.mount_point }} {{ mount.fstab.type | default('ext4') }} {{ mount.fstab.options | default('defaults,nofail') }} {{ mount.fstab.dump | default('0') }} {{ mount.fstab.pass | default('2') }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if mounts_pooled is defined and mounts_pooled|length > 0 %}
 ###### Drive Pools - Multiple mount points that are combined into a single location
 {% for pool in mounts_pooled %}
-{% if pool.comment is defined %}# {{ pool.comment }}{% endif %}
+{% if pool.comment is defined %}# {{ pool.comment }}
+{% endif %}
 {{ pool.branches|join(':') }} {{ pool.mount_point }} fuse.mergerfs {% if pool.name is defined and pool.name != '' %}fsname={{ pool.name }},{% endif %}{{ pool.options | default('defaults,allow_other,use_ino') }} {{ pool.dump | default('0') }} {{ pool.pass | default('0') }}
 {% endfor %}
 {% endif %}
