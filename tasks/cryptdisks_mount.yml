@@ -1,24 +1,25 @@
 ---
-- fail:
+- name: Verify that the cryptdisks mount does not have conflicting mounts
+  ansible.builtin.fail:
     msg: You may only define one of 'mounts_cryptdisks.uuid' or 'mounts_cryptdisks.net_path'
   when: mounts_cryptdisks.uuid is defined and mounts_cryptdisks.net_path is defined
 
 - name: Create folder for the cryptdisks mount point
-  file:
+  ansible.builtin.file:
     state: directory
     owner: root
     group: root
     mode: '0700'
     path: "{{ mounts_cryptdisks.mount_point }}"
 
-- name: "Configure `CRYPTDISKS_MOUNT` in '{{ mounts_cryptdisks_path }}'"
-  lineinfile:
+- name: "Configure `CRYPTDISKS_MOUNT` in '{{ mounts_cryptdisks_path }}'" # noqa name[template]
+  ansible.builtin.lineinfile:
     path: "{{ mounts_cryptdisks_path }}"
     regexp: '^CRYPTDISKS_MOUNT=.+'
     line: "CRYPTDISKS_MOUNT=\"{{ mounts_cryptdisks.mount_point | default('') }}\""
 
 - name: Push out the credentials file
-  template:
+  ansible.builtin.template:
     src: smbcredentials.j2
     dest: "{{ mounts_cryptdisks.net_credentials.path }}"
     owner: root

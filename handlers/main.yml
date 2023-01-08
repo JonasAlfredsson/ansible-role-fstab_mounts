@@ -1,12 +1,12 @@
 ---
 - name: Unlock encrypted drives
-  shell: "cryptdisks_start {{ item.name | default(item.uuid) }}"
+  ansible.builtin.command: "cryptdisks_start {{ item.name | default(item.uuid) }}"
   with_items: "{{ mounts_encrypted }}"
   register: unlock_drives
   ignore_errors: true
 
 - name: Verify all encrypted drives could be unlocked
-  fail:
+  ansible.builtin.fail:
     msg: "{{ item.stderr }}"
   when: >
     (not ansible_check_mode)
@@ -21,15 +21,13 @@
 # point then the -a command will fail. To simplify things we will first ignore
 # this type of mount completely, and then handle them separately.
 - name: Mount drives
-  args:
-    warn: false
-  shell: mount -a -t nofuse.mergerfs
+  ansible.builtin.command: mount -a -t nofuse.mergerfs
 
 # ZFS has its own mounting service for those datasets which are not managed by
 # fstab ('legacy' mounts), so we need to call this one separately (this should
 # be handled automatically, but it doesn't hurt).
 - name: Mount ZFS datasets
-  shell: zfs mount -a
+  ansible.builtin.command: zfs mount -a
   when: mounts_zfs is defined
   listen: Mount drives
 
@@ -37,9 +35,7 @@
 # but as the code is written right now we cannot identify if anything has
 # changed in regards to the mount options...
 - name: Mount pooled drives
-  shell: "mount --target {{ item.mount_point }}"
-  args:
-    warn: false
+  ansible.builtin.command: "mount --target {{ item.mount_point }}"
   changed_when: mount_pooled_drives.rc == 0
   failed_when: >
     (not ansible_check_mode)
@@ -57,7 +53,7 @@
 # case something has changed. Read more here:
 # https://github.com/trapexit/mergerfs#runtime-config
 - name: Verify all pooled drives could be mounted
-  fail:
+  ansible.builtin.fail:
     msg: "Pooled mount point '{{ item.item.mount_point }}' is not empty; please reboot in case you know something has changed"
   when: >
     ("fuse: mountpoint is not empty" in item.stderr_lines|first)

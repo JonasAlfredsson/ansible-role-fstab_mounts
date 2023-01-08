@@ -1,52 +1,66 @@
 ---
-- fail:
+- name: Verify that boot drives are defined
+  ansible.builtin.fail:
     msg: "You must define all the boot drives manually"
   when: mounts_boot is not defined or mounts_boot|length == 0
 
 - name: Install 'cifs-utils' if network drives are present
-  include: install_package.yml package=cifs-utils
+  ansible.builtin.include_tasks: install_package.yml
+  vars:
+    package: cifs-utils
   when: mounts_network is defined or mounts_cryptdisks.net_path is defined
 
 - name: Install 'cryptsetup' if encrypted drives are present
-  include: install_package.yml package=cryptsetup
+  ansible.builtin.include_tasks: install_package.yml
+  vars:
+    package: cryptsetup
   when: mounts_encrypted is defined or mounts_cryptdisks is defined
 
 - name: Install 'mergerfs' if pooled drives are present
-  include: configure_mergerfs.yml
+  ansible.builtin.include_tasks: configure_mergerfs.yml
   when: mounts_pooled is defined
 
 - name: Install 'zfsutils' if any ZFS pools are present
-  include: install_zfs.yml
+  ansible.builtin.include_tasks: install_zfs.yml
   when: mounts_zfs is defined
 
 - name: Enable a specific mount point that is necessary in order to unlock encrypted drives
-  include: cryptdisks_mount.yml
+  ansible.builtin.include_tasks: cryptdisks_mount.yml
   when: mounts_cryptdisks is defined
 
 - name: Push out the 'fstab' file
-  template:
+  ansible.builtin.template:
     dest: "{{ mounts_fstab_path }}"
     src: fstab.j2
+    owner: root
+    group: root
+    mode: "0644"
   notify:
     - Mount drives
 
 - name: Push out the 'crypttab' file
-  template:
+  ansible.builtin.template:
     dest: "{{ mounts_crypttab_path }}"
     src: crypttab.j2
+    owner: root
+    group: root
+    mode: "0644"
   notify:
     - Unlock encrypted drives
     - Mount drives
   when: mounts_encrypted is defined
 
 - name: Install service to make sure all encrypted drives are unlocked
-  template:
+  ansible.builtin.template:
     dest: "/etc/systemd/system/unlock-crypttab.service"
     src: unlock-crypttab.service.j2
+    owner: root
+    group: root
+    mode: "0644"
   when: mounts_encrypted is defined
 
 - name: Enable crypttab unlocking service at boot
-  service:
+  ansible.builtin.service:
     name: unlock-crypttab.service
     enabled: yes
     state: started
@@ -55,7 +69,7 @@
 - name: Have ZFS depend on the crypttab unlocking service
   block:
     - name: Create folder for override configuration
-      file:
+      ansible.builtin.file:
         path: /etc/systemd/system/zfs-import-cache.service.d
         owner: root
         group: root
@@ -66,7 +80,7 @@
     # appears like cryptsetup.target correctly includes these when they are
     # needed by the zfs-import-cache.service.
     - name: Add override configuration for zfs-import-cache.service
-      copy:
+      ansible.builtin.copy:
         src: zfs-import-cache.override
         dest: /etc/systemd/system/zfs-import-cache.service.d/override.conf
         owner: root
@@ -82,8 +96,8 @@
     # this case).
     # Furthermore, it does not appear that an .override file works as intended
     # with removing Before= statements, so we need to replace the line instead.
-    - name: replace line
-      lineinfile:
+    - name: Change ZFS mount from a 'local' to a 'remote' filesystem
+      ansible.builtin.lineinfile:
         path: /lib/systemd/system/zfs-mount.service
         regexp: '^Before=local-fs.target$'
         line: 'Before=remote-fs.target'

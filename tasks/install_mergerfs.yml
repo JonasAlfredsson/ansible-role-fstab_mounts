@@ -1,23 +1,27 @@
 ---
 - name: Download 'mergerfs' installation package
-  get_url:
+  ansible.builtin.get_url:
     url: "https://github.com/trapexit/mergerfs/releases/download/{{ mounts_mergerfs_version }}/mergerfs_{{ mounts_mergerfs_version }}.{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}_amd64.deb"
     dest: "{{ mounts_mergerfs_tmp_dir }}/mergerfs_{{ mounts_mergerfs_version }}.{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}_amd64.deb"
+    owner: root
+    group: root
+    mode: "0640"
     timeout: 60
 
 - name: Install 'mergerfs'
-  apt:
+  ansible.builtin.apt:
     deb: "{{ mounts_mergerfs_tmp_dir }}/mergerfs_{{ mounts_mergerfs_version }}.{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}_amd64.deb"
 
 - name: Get infromation about the newly installed version of mergerfs
-  shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'"
+  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
   register: mergerfs_installed_version
 
-- fail:
+- name: Verify that the correct version was installed
+  ansible.builtin.fail:
     msg: "mergerfs is reporting '{{ mergerfs_installed_version.stdout }}' as the installed version instead of the requested '{{ mounts_mergerfs_version }}'"
   when: mergerfs_installed_version.stdout is not version(mounts_mergerfs_version, '==')
 
 - name: Remove .deb file
-  file:
+  ansible.builtin.file:
     path: "{{ mounts_mergerfs_tmp_dir }}/mergerfs_{{ mounts_mergerfs_version }}.{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}_amd64.deb"
     state: absent

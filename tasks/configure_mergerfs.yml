@@ -1,8 +1,8 @@
 ---
 - name: Get the currently installed version of mergerfs
-  shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'"
+  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
   check_mode: no
-  register: mergerfs_current_version
+  register: mergerfs_current_version # noqa no-changed-when
   failed_when: >
     (mergerfs_current_version.rc != 0)
     and not
@@ -10,15 +10,15 @@
 
 - name: Verify that the requested version of mergerfs is newer than the one installed
   block:
-    - fail:
+    - ansible.builtin.fail:
         msg: "The installed version of mergerfs ({{ mergerfs_current_version.stdout }}) is newer than the requested version ({{ mounts_mergerfs_version }})"
       when: mergerfs_current_version.stdout is version(mounts_mergerfs_version, '>')
 
     - name: Install new version of mergerfs
-      include: install_mergerfs.yml
+      ansible.builtin.include_tasks: install_mergerfs.yml
       when: mergerfs_current_version.stdout is version(mounts_mergerfs_version, '<')
   when: mergerfs_current_version.stdout != ''
 
 - name: Install mergerfs
-  include: install_mergerfs.yml
+  ansible.builtin.include_tasks: install_mergerfs.yml
   when: mergerfs_current_version.stdout == ''
