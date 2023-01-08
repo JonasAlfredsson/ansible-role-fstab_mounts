@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: ansible_role_fstab_mounts
+  author: Jonas Alfredsson
+  description: Ansible role for installing and managing multiple programs who all need to create entries in `/etc/fstab`.
+
+  license: GPL-2.0 license
+
+  min_ansible_version: "2.7"
+
+  platforms:
+    - name: Debian
+      versions:
+        - all
+
+  galaxy_tags: []
+
+dependencies: []
