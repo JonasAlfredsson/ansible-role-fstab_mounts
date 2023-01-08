@@ -223,6 +223,9 @@ mounts_cryptdisks:
   pass: 0
 ```
 
+> Check out crazy setup of [Dexter Kane][55] to get a feeling of how this can
+> be used for an advanced setup where you have have to compromise two machines
+> in order to be able to get to the data.
 
 ## ZFS Mounts
 
@@ -1096,3 +1099,5 @@ into the [`combine`][5] filter or the [`merge_vars`][4] action plugin.
 [52]: https://askubuntu.com/questions/305830/replacing-a-dead-disk-in-a-zpool
 [53]: https://docs.oracle.com/cd/E19253-01/819-5461/gbiqe/index.html
 [54]: https://www.freedesktop.org/software/systemd/man/crypttab.html
+[55]: https://forum.level1techs.com/t/dexter-kanes-ultra-paranoid-encrypted-nas-completed/98340
+
