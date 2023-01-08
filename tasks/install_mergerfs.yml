@@ -6,12 +6,10 @@
     timeout: 60
 
 - name: Install 'mergerfs'
-  become: true
   apt:
     deb: "{{ mounts_mergerfs_tmp_dir }}/mergerfs_{{ mounts_mergerfs_version }}.{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}_amd64.deb"
 
 - name: Get infromation about the newly installed version of mergerfs
-  become: true
   shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'"
   register: mergerfs_installed_version
 

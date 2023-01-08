@@ -24,7 +24,6 @@
   when: mounts_cryptdisks is defined
 
 - name: Push out the 'fstab' file
-  become: true
   template:
     dest: "{{ mounts_fstab_path }}"
     src: fstab.j2
@@ -32,7 +31,6 @@
     - Mount drives
 
 - name: Push out the 'crypttab' file
-  become: true
   template:
     dest: "{{ mounts_crypttab_path }}"
     src: crypttab.j2
@@ -42,14 +40,12 @@
   when: mounts_encrypted is defined
 
 - name: Install service to make sure all encrypted drives are unlocked
-  become: true
   template:
     dest: "/etc/systemd/system/unlock-crypttab.service"
     src: unlock-crypttab.service.j2
   when: mounts_encrypted is defined
 
 - name: Enable crypttab unlocking service at boot
-  become: true
   service:
     name: unlock-crypttab.service
     enabled: yes
@@ -59,7 +55,6 @@
 - name: Have ZFS depend on the crypttab unlocking service
   block:
     - name: Create folder for override configuration
-      become: true
       file:
         path: /etc/systemd/system/zfs-import-cache.service.d
         owner: root
@@ -71,7 +66,6 @@
     # appears like cryptsetup.target correctly includes these when they are
     # needed by the zfs-import-cache.service.
     - name: Add override configuration for zfs-import-cache.service
-      become: true
       copy:
         src: zfs-import-cache.override
         dest: /etc/systemd/system/zfs-import-cache.service.d/override.conf

@@ -1,6 +1,5 @@
 ---
 - name: "Configure the 'contrib' repository"
-  become: true
   apt_repository:
     update_cache: true
     repo: "deb http://deb.debian.org/debian {{ ansible_distribution_release }}-backports main contrib"
@@ -8,7 +7,6 @@
     filename: backports-contrib
 
 - name: "Install prerequisite packages for ZFS"
-  become: true
   environment:
     DEBIAN_FRONTEND: noninteractive
   apt:
@@ -20,7 +18,6 @@
     state: present
 
 - name: "Install ZFS packages (this might take a while)"
-  become: true
   environment:
     DEBIAN_FRONTEND: noninteractive
   apt:

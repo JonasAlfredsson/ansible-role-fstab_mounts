@@ -1,6 +1,5 @@
 ---
 - name: "Install '{{ package }}'"
-  become: true
   environment:
     DEBIAN_FRONTEND: noninteractive
   apt:

@@ -1,6 +1,5 @@
 ---
 - name: Unlock encrypted drives
-  become: true
   shell: "cryptdisks_start {{ item.name | default(item.uuid) }}"
   with_items: "{{ mounts_encrypted }}"
   register: unlock_drives
@@ -22,7 +21,6 @@
 # point then the -a command will fail. To simplify things we will first ignore
 # this type of mount completely, and then handle them separately.
 - name: Mount drives
-  become: true
   args:
     warn: false
   shell: mount -a -t nofuse.mergerfs
@@ -31,7 +29,6 @@
 # fstab ('legacy' mounts), so we need to call this one separately (this should
 # be handled automatically, but it doesn't hurt).
 - name: Mount ZFS datasets
-  become: true
   shell: zfs mount -a
   when: mounts_zfs is defined
   listen: Mount drives
@@ -40,7 +37,6 @@
 # but as the code is written right now we cannot identify if anything has
 # changed in regards to the mount options...
 - name: Mount pooled drives
-  become: true
   shell: "mount --target {{ item.mount_point }}"
   args:
     warn: false
