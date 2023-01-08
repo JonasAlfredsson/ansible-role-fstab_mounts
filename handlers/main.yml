@@ -27,9 +27,18 @@
     warn: false
   shell: mount -a -t nofuse.mergerfs
 
-# After the above command we try to mount all pooled drives, but as the code
-# is written right now we cannot identify if anything has changed in regards
-# to the mount options...
+# ZFS has its own mounting service for those datasets which are not managed by
+# fstab ('legacy' mounts), so we need to call this one separately (this should
+# be handled automatically, but it doesn't hurt).
+- name: Mount ZFS datasets
+  become: true
+  shell: zfs mount -a
+  when: mounts_zfs is defined
+  listen: Mount drives
+
+# After the above handlers have completed we try to mount all pooled drives,
+# but as the code is written right now we cannot identify if anything has
+# changed in regards to the mount options...
 - name: Mount pooled drives
   become: true
   shell: "mount --target {{ item.mount_point }}"

@@ -1,0 +1,75 @@
+{#
+This systemd unit file was created in order to try to solve an annoying
+dependency and triggering issue during boot. So while trying to not making this
+explanation too long here are the basics:
+
+systemd-crypttab-generator creates ".services" in `/run/systemd/generator` for
+each entry defined inside crypttab, and when these services are started they
+will unlock the encrypted device and create the `/dev/mapper/` mount point.
+
+systemd-fstab-generator creates ".mounts" in `/run/systemd/generator` for
+each entry defined inside fstab, and these will then mount all the devices at
+boot. These unit files also contain "Requires=" and "After=" parameters pointing
+at the correct crypttab service in case it is a mapper device that is to be
+mounted. Systemd is then able to assemble a dependency graph from this, and
+correctly unlock the encrypted device before it attempts to use the decrypted
+mapper point for the final mounting.
+
+The problem occurs with ZFS, where the services of interest have the following
+simplified dependency graph:
+
+    cryptsetup.target <-  zfs-import-cache.service <- zfs-import.target
+
+This _should_ work, as ZFS does not try to import anything before cryptsetup is
+done, but I found that the crypttab services mentioned in the beginning are not
+started unless they are explicitly referenced in a "Required=" option. I also
+ran into strangeness with timings for when systemd though a service had
+completed startup and started the succeeding services a little bit too quick.
+
+This unit file is therefore quite simple, where we just depend on all the
+crypttab entries that does not have a corresponding fstab entry, and we will
+not exit until all of the expected mappers are present.
+
+By being wanted by the cryptsetup.target we will also be triggered at boot. But
+it was not enough for zfs-import-cache.service to just depend on that .target,
+so we had to explicitly state that this unit file is a prerequisite for it so
+it does not try to import pools too early.
+
+Some extra links to read about regarding waiting for the network and then
+having systemd reload all fileystem mounts:
+- https://bbs.archlinux.org/viewtopic.php?id=192991
+- https://www.freedesktop.org/wiki/Software/systemd/NetworkTarget/
+#}
+[Unit]
+Description=Unlock crypttab devices that do not have mounts defined in fstab
+DefaultDependencies=no
+Requires=systemd-udev-settle.service
+After=systemd-udev-settle.service
+After=network.target
+After=multipathd.target
+After=systemd-remount-fs.service
+Before=zfs-import-cache.service
+{% if mounts_encrypted is defined and mounts_encrypted|length > 0 %}
+{% for mount in mounts_encrypted %}
+{% if mount.fstab.mount_point is not defined %}
+Requires=systemd-cryptsetup@{{ ( mount.name | default(mount.uuid) ) | replace("-", "\\x2d") }}.service
+After=systemd-cryptsetup@{{ ( mount.name | default(mount.uuid) ) | replace("-", "\\x2d") }}.service
+{% endif %}
+{% endfor %}
+{% endif %}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c "\
+{% if mounts_encrypted is defined and mounts_encrypted|length > 0 %}
+{% for mount in mounts_encrypted %}
+{% if mount.fstab.mount_point is not defined %}
+    while [ ! -L /dev/mapper/{{ ( mount.name | default(mount.uuid) ) }} ]; do sleep 1; done; \
+{% endif %}
+{% endfor %}
+{% endif %}
+    echo 'Waited for all /dev/mapper points'"
+
+[Install]
+WantedBy=cryptsetup.target

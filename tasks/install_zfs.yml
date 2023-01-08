@@ -1,0 +1,32 @@
+---
+- name: "Configure the 'contrib' repository"
+  become: true
+  apt_repository:
+    update_cache: true
+    repo: "deb http://deb.debian.org/debian {{ ansible_distribution_release }}-backports main contrib"
+    state: present
+    filename: backports-contrib
+
+- name: "Install prerequisite packages for ZFS"
+  become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  apt:
+    name:
+      - "dkms"
+      - "dpkg-dev"
+      - "linux-headers-{{ ansible_kernel }}"
+      - "linux-image-{{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}"
+    state: present
+
+- name: "Install ZFS packages (this might take a while)"
+  become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  apt:
+    name:
+      - "zfs-dkms"
+      - "zfs-zed"
+      - "zfsutils-linux"
+    state: present
+    default_release: "{{ ansible_distribution_release }}-backports"

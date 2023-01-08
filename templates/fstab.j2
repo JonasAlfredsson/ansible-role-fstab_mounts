@@ -44,6 +44,15 @@ UUID={{ mount.uuid }} {{ mount.mount_point }} {{ mount.type | default('ext4') }}
 {% endfor %}
 {% endif %}
 
+{% if mounts_zfs is defined and mounts_zfs|length > 0 %}
+###### ZFS Mounts - The mount points for the ZFS datasets
+{% for mount in mounts_zfs %}
+{% if mount.comment is defined %}# {{ mount.comment }}
+{% endif %}
+{{ mount.dataset }} {{ mount.mount_point }} {{ mount.type | default('zfs') }} {{ mount.options | default('defaults,x-systemd.requires=zfs-mount.service') }} {{ mount.dump | default('0') }} {{ mount.pass | default('0') }}
+{% endfor %}
+{% endif %}
+
 {% if mounts_pooled is defined and mounts_pooled|length > 0 %}
 ###### Drive Pools - Multiple mount points that are combined into a single location
 {% for pool in mounts_pooled %}

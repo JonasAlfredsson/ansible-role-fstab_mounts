@@ -9,6 +9,7 @@ types of `fstab` mount entries:
 - Normal mounts
 - Encrypted mounts
   - With options for loading the decryption keys from a remote host.
+- ZFS legacy mounts
 - Pooled mounts (using [mergerfs][1] for pooling).
 
 
@@ -55,7 +56,7 @@ main playbook like this:
 
 # Usage
 
-There are four "types" of mounts which can be managed with this role, and they
+There are five "types" of mounts which can be managed with this role, and they
 will all have their own section that explains how to properly configure them.
 However, the only section that is required to be completed is the
 "[boot mounts](#boot-mounts)" one, since otherwise you may end up in a state
@@ -75,6 +76,7 @@ section, otherwise just continue reading.
 - [Normal Mounts](#normal-mounts)
 - [Encrypted Mounts](#encrypted-mounts)
   - [The `cryptdisks` Mount](#the-cryptdisks-mount)
+- [ZFS Mounts](#zfs-mounts)
 - [Pooled Mounts](#pooled-mounts)
 
 > NOTE: Some extra information about Ansible variables may be found
@@ -163,19 +165,25 @@ have to be "unlocked" by [`cryptsetup`][10] before it can be mounted as usual
 Here are the options for encrypted mounts, where the defaults are entered and
 any field which is not marked with `# Required` may be left out of your
 configuration if you are fine with the defaults. The `name` field defaults to
-the `uuid` unless something is specifically defined, but since it will be this
-device's decrypted endpoint under `/dev/mapper/` it needs to be unique.
+the `uuid` unless something is specifically defined, but if you add something
+custom you need to remember that it will be this device's decrypted endpoint
+under `/dev/mapper/` so it needs to be unique.
+
+Furthermore, the `mount_point` field is only required in case you want the
+decrypted `/dev/mapper/` endpoint mounted somewhere else. For example, the
+entire `fstab` section should be omitted in the case you are using ZFS with
+these mapper points as the [identifiers](#choose-a-good-disk-identifier).
 
 ```yaml
 mounts_encrypted:
   - uuid:  # Required
     name: "{{ uuid }}"
-    mount_point:  # Required
+    key_file:  # Required
     crypttab:
-      key_file:  # Required
       options: "luks,nofail"
       comment: ""
     fstab:
+      mount_point:  # Only required if you want the decrypted mapper point mounted
       type: "ext4"
       options: "defaults,nofail"
       dump: 0
@@ -214,6 +222,51 @@ mounts_cryptdisks:
   dump: 0
   pass: 0
 ```
+
+
+## ZFS Mounts
+
+ZFS is a feature rich filesystem which comes with its own mounting service. It
+is recommended to let that service be responsible for managing the mounting
+of any ZFS datasets instead of `fstab`, so in order to tell this role that you
+only want ZFS installed and then let this mounting service be responsible for
+the rest is easily achieved by the following configuration:
+
+```yaml
+mounts_zfs: {}
+```
+
+However, if you want to keep everything centralized through this role it is
+possible to set the `legacy` mounting option on the ZFS dataset which would
+let `fstab` be responsible for its mounting. Read more about how to activate
+`legacy` mounting for each relevant dataset in the
+[Create ZFS Array](#create-zfs-array) section, but after that it should be
+as simple as this to configure the mount point. Any field which is not marked
+with `# Required` may be left out of your configuration if you are fine with
+the defaults.
+
+> The `dataset` value here start with the pool and then the dataset's path, e.g.
+  `pool1/datasets/data1`.
+
+```yaml
+mounts_zfs:
+  - dataset:  # Required
+    mount_point:  # Required
+    type: "zfs"
+    options: "defaults,x-systemd.requires=zfs-mount.service"
+    dump: 0
+    pass: 0
+    comment: ""
+```
+
+You most likely want the [`x-systemd.requires=zfs-mount.service`][26] option on
+all ZFS mounts, as else `fstab` might try to mount datasets before the ZFS
+service is ready to handle it and will thus fail with errors. Also you might
+want to know about [`x-systemd.requires-mounts-for`][38] that is
+[automatically added][37] during boot by the [`systemd.generator`][40] in case
+a mount point is beneath another one in the filesystem hierarchy, but this is
+also something you can specify yourself if you want
+([more systemd options][39]).
 
 
 ## Pooled Mounts
@@ -279,16 +332,32 @@ suggestions on how to do these things. If you want more advanced options you
 will need to do some extra research by yourself.
 
 - [Create Normal Drive](#create-normal-drive)
-  1. [Create Partition Table](#create-partition-table)
-  2. [Create Partition](#create-partition)
-  3. [Create Filesystem](#create-filesystem)
-  4. [Mount It](#mount-it)
+  - [Create Partition Table](#create-partition-table)
+  - [Create Partition](#create-partition)
+  - [Create Filesystem](#create-filesystem)
+  - [Mount It](#mount-it)
 - [Create Encrypted Drive](#create-encrypted-drive)
-  1. [Create a Keyfile](#create-a-keyfile)
-  2. [Encrypt Device/Partition](#encrypt-devicepartition)
-  3. [Unlock Encrypted Device](#unlock-encrypted-device)
-  4. [Create Normal Filesystem](#create-normal-filesystem)
-  5. [Mount It](#mount-it-1)
+  - [Create a Keyfile](#create-a-keyfile)
+  - [Encrypt Device/Partition](#encrypt-devicepartition)
+  - [Unlock Encrypted Device](#unlock-encrypted-device)
+  - [Create Normal Filesystem](#create-normal-filesystem)
+  - [Mount It](#mount-it-1)
+- [Create ZFS Array](#create-zfs-array)
+  - [Choose a Good Disk Identifier](#choose-a-good-disk-identifier)
+  - [Create a Pool](#create-a-pool)
+    - [Dataset Properties](#dataset-properties)
+    - [The Mountpoint Property](#the-mountpoint-property)
+    - [Creating the Pool](#creating-the-pool)
+  - [Create Dataset](#create-dataset)
+  - [Mount It](#mount-it-2)
+    - [Import Pool](#import-pool)
+  - [Maintenance](#maintenance)
+    - [Some Everyday Commands](#some-everyday-commands)
+    - [Health Monitoring](#health-monitoring)
+    - [Scrubbing](#scrubbing)
+    - [Trimming](#trimming)
+    - [Snapshotting](#snapshotting)
+  - [Replace a disk](#replace-a-disk)
 
 
 ## Create Normal Drive
@@ -443,7 +512,7 @@ Now we can encrypt the entire block device
 sudo cryptsetup luksFormat -v -y --key-file=/path/to/first-drive.key /dev/sdX
 ```
 
-> If you intend to use the entire dirve you will **not** need to create a
+> If you intend to use the entire drive you will **not** need to create a
   [partition table](#create-partition-table) beforehand.
 
 or we can encrypt an already existing partition
@@ -490,10 +559,10 @@ now mount it.
 sudo mount /dev/mapper/first-drive /mnt/first-drive
 ```
 
-The importance of the unique drive name is because `crypttab` will first mount
-a "encrypted filesystem" to a point in `/dev/mapper/`, which then `fstab` will
-use to mount to the "correct" location later. So something like this is what is
-happening:
+The importance of the unique drive name is because [`crypttab`][54] will first
+mount a "encrypted filesystem" to a point in `/dev/mapper/`, which then `fstab`
+will use to mount to the "correct" location later. So something like this is
+what is happening:
 
 
 ```
@@ -511,6 +580,357 @@ Try going into the desired mount point and create a file, just to be certain
 everything works as intended.
 
 
+## Create ZFS Array
+
+1. [Choose a Good Disk Identifier](#choose-a-good-disk-identifier) - Once per drive.
+2. [Create a Pool](#create-a-pool) - Once per array.
+    - (Optional) [Enable `legacy` mounting](#the-mountpoint-property) - Once per pool or dataset.
+3. [Create Dataset](#create-dataset) - As many as you like.
+4. [Mount it](#mount-it-2) - You can mount all datasets at once.
+5. [Read About Maintenance](#maintenance) - As many times you want to.
+
+[ZFS][27] is touting to be "the last filesystem you will ever need", and it sure
+does have a lot of features that will make the job of storing data much nicer.
+However, it requires you to do quite a bit of research and configuring in order
+for it to actually be as good as it advertise, so do not just follow this guide
+blindly as my settings might not be the right ones for your setup.
+
+Before continuing I would also just like to point out that the terminology of
+ZFS components might not be totally straight forward if you are completely new
+to this, so a suggestion is to have a look at [this documentation][24] for a
+quick overview with perhaps a longer read of this [Ars Technica][28] article if
+you want to start out somewhere.
+
+But to keep it simple we will first make so that each drive we want to include
+in the array has a non-changing identifier, then we will create the root
+pool/tank with the `zpool` program before we finally create usable filesystems
+(datasets) that reside inside this pool with the `zfs` program. Some decisions
+cannot be changed after the creation of the pool (without starting over from
+scratch) so it might be good to read through this entire section before
+actually doing anything.
+
+### Choose a Good Disk Identifier
+
+When creating a pool we will need to provide target paths to each device we want
+to include in the array, but since the classic `/dev/sdX` paths provide no
+guarantee that a disk will get the same letter after a reboot we should really
+try to use something that will not change without our knowledge.
+
+There are a [few ways][32] to get an identifier that is constant, but I think
+the best one is to use UUIDs. However, in order to get a UUID on a device we
+first need to create a partition on the drive, and while you can target a naked
+drive with ZFS (like most guides I have found do), doing it like this is a much
+more robust solution and you only lose a megabyte or so of usable space. Just
+follow the [Create Normal Drive](#create-normal-drive) guide section up until
+the point where it mentions the creation of a filesystem, then you come back
+and continue from here.
+
+Another solid type of identifier, that is predictive, is the one you assign to
+encrypted disks. While ZFS do have native support for encryption of each
+separate dataset, it actually seems [more secure][22] and [faster][23] to just
+put the ZFS filesystem on a LUKS encrypted drive and then use the decrypted
+"mapper" mount point as target when referencing devices in ZFS. Follow the
+[encryption guide](#create-encrypted-drive) until the step where it is time to
+[unlock](#unlock-encrypted-device) the device, and then use its
+`/dev/mapper/<id>` path as the identifier when you continue this guide.
+
+### Create a Pool
+
+After the preferred identifier has been chosen we will continue with creating
+a pool. This will be the root location inside of which we will later create our
+filesystems/datasets. Most of the [properties of the pool][35] are not
+changeable later, so these need to be configured correctly from the beginning.
+However, the default values are very reasonable with the notable exception being
+[`ashift`][30] which should be manually configured by you according to the
+sector size of your disks. It is a **very high** probability that you want
+`ashift=12`, but please double check before continuing.
+
+What is a little bit confusing is that the root of the pool is actually a usable
+filesystem, but it appears like noone use this directly just because the
+filepaths makes more sense in case you do not use it. However, it is still
+possible to [set its properties][36], and this can be exploited in order to
+create sane defaults for the future datasets in this pool since everything
+inherits from its parent's properties unless something else is explicitly
+specified.
+
+So in the coming command, where a pool is created with the help of `zpool`,
+the filesystem options are given with capital O and the pool options are with
+a small letter (quite difficult to differentiate at a quick glance). But before
+the command I will just quickly go through why I have provided the options that
+I have, so I may look back at this and remember in the future.
+
+#### Dataset Properties
+There is a paper [here][25] which discuss which recordsize/blocksize to use for
+best performance, but unless you are running a database on the disks you can be
+quite satisfied with 128K. Compression is a nice bonus to have automatically
+on everything you write and [`lz4`][29] is awfully fast in addition to providing
+good compression ratios.
+
+The `utf8only`, `casesensitivity` and `normalization` should give you a nice
+filesystem where you can basically name your files whatever and have them sorted
+in a sane fashion. The `sharesmb` and `sharenfs` options are in case you want
+the ZFS mount program to automatically expose these as SMB or NFS shares as
+well, but I prefer to handle that separately.
+
+The `atime=on` option will make so that each file is updated with the timestamp
+of when the file was last accessed. This cause a slight performance hit as a
+write needs to happen every time a file is accessed, and in the case of a
+database, where a lot of small files are accessed repeatedly and you don't care
+of when these are accessed, you should turn this off. Having `relatime=on` in
+addition to `atime` is a compromise of turning the latter off, as now the
+access time is only updated if the modified time or changed time changes, or if
+the existing access time has not been updated within the past 24 hours.
+
+#### The Mountpoint Property
+Finally there is the [`mountpoint`][34] property. Unless this value is set to
+`legacy` or `none` the `zfs` program will automatically mount the dataset to
+the path specified. How inheritance works for this property is like this: if
+the dataset `pool1/media` has the mountpoint set to `/media/zfs`, then the
+`pool1/media/movies` dataset will get `/media/zfs/movies` as its mountpoint.
+It is also fully possible to mount the datasets `pool1/media` and
+`pool1/media/movies` to two completely separate locations like `/media/zfs` and
+`/mnt/movies` if you want, even though it looks weird.
+
+Setting the property to `legacy` delegates the task of mounting the disk to
+the normal `mount` program, which means you will have to manually mount the
+dataset like this:
+
+```
+sudo mount -t zfs pool1/media/movies /mnt/movies
+```
+
+To have the `legacy` dataset mounted at boot you have to add an entry in
+`fstab`, however, this is not a very common option and actually specifying
+the mountpoint property on the dataset should be preferred unless you have a
+good reason to despise it. Some more info about stuff to think about in case
+you go this route is present in the [ZFS mounts](#zfs-mounts) section where
+you also manage the `fstab` entries.
+
+#### Creating the Pool
+We are now finally ready to actually create the pool. Looking at the last line
+I first specify the name of the pool (`pool1`), the redundancy of the array
+([`raidz`][41]) and then finally all the devices (disks) that should be part
+of it. As was mentioned before I use the `/dev/disk/<uuid>` path in order to
+keep consistency after reboots.
+
+```
+sudo zpool create \
+      -o ashift=12 \
+      -O recordsize=128k \
+      -O compression=lz4 \
+      -O utf8only=on \
+      -O casesensitivity=sensitive \
+      -O normalization=formD \
+      -O sharesmb=off \
+      -O sharenfs=off \
+      -O atime=on \
+      -O relatime=on \
+      -O mountpoint=legacy \
+    pool1 raidz /dev/disk/<uuid1> /dev/disk/<uuid2> /dev/disk/<uuid3>
+```
+
+If this command succeed you may then list the info about the current pool with
+the help of the following command:
+
+```
+sudo zfs get all pool1
+```
+
+
+### Create Dataset
+
+With the pool now created we may continue to create datasets which work
+basically like filesystems in normal drive terms. We have actually already
+touched upon some [dataset properties](#dataset-properties) since the root pool
+is usable as a dataset and has all the same options available (the capital `-O`
+options above) as we [will have here][36].
+
+I am usually quite happy with the same defaults we defined in the
+[previous section](#creating-the-pool) for basically all my datasets, so I will
+just add some options to the command below to show how it might look like if
+you were to tune the dataset for housing databases instead.
+
+```
+sudo zfs create \
+      -o recordsize=8k \
+      -o atime=off \
+      -o primarycache=metadata \
+      -o logbias=throughput \
+    pool1/postgreql
+```
+
+As you can see we use the `zfs` program here, as this only expose options for
+creating datasets and thus we minimize the risk of doing something stupid.
+But you may now create as many datasets you want, and they are very independent
+of each other even if they appear to be located "inside" each other like
+`pool1/media` and `pool1/media/movies`.
+
+Remember that properties are inherited, so if you specified `legacy` as the
+[mountpoint for the pool](#creating-the-pool) you will need to either set
+a specific mountpoint for each dataset or make sure you  handle the mounting
+manually via [`fstab`](#zfs-mounts).
+
+### Mount It
+
+As was mentioned earlier the ZFS service will automatically mount all datasets
+that are not set to `legacy` or `none`, but you can trigger it again with
+
+```
+sudo zfs mount -a
+```
+
+or the following command if you have a dataset with `legacy` mounting options
+
+```
+sudo mount -t zfs pool1/media/movies /mnt/movies
+```
+
+Changing a datasets mount point is as simple as this
+
+```
+sudo zfs set mountpoint=/mnt/movies pool1/media/movies
+```
+
+which should trigger a mount automatically.
+
+#### Import Pool
+
+If you cannot mount anything and it complains about no pools being present you
+can have ZFS scan your system and import any pools it finds:
+
+```
+sudo zpool import -a
+```
+
+and if you are transferring it from another computer you may need to forcefully
+import it with its ID (which you get by using `-f` instead of `-a` in the
+command above)
+
+```
+sudo zpool import -f 5536839315307152828
+```
+
+### Maintenance
+
+I mentioned briefly in the beginning of this section that ZFS is a very solid
+filesystem if you want to store a lot of data, but you will need to do some
+proper configuring if you want it to keep the data safe over long periods of
+time. And to help you get started with this never ending task I will just list
+some of the things I though were important here.
+
+#### Some Everyday Commands
+Before diving too deep I thought it perhaps could be useful to list some simple
+commands that may be used to just get a quick grasp of the system and make you
+comfortable moving around.
+
+**List Available Pools**
+```
+sudo zpool list
+```
+
+**List All ZFS Datasets**
+```
+sudo zfs list
+```
+
+**Get Info About Dataset**
+```
+sudo zfs get all pool1/media/movies
+```
+
+#### Health Monitoring
+The most important thing you can do is to actually monitor the health of your
+pools so you can act when something is awry. The simplest [command][43] you
+can run to get an overview of your arrays is this:
+
+```bash
+sudo zpool status -x
+```
+
+This will print information about anything which ZFS thinks needs your
+attention, or just "all pools are healthy" if everything is fine.
+
+However, there is then no limit on how advanced you could make this type of
+health monitoring, with remote logging services that send you mail based on
+trigger words or similar so that you do not have to check manually every time.
+But stuff like that is out of scope of this guide so I will just put [this][45]
+link here for you to read if you want.
+
+#### Scrubbing
+[Scrubbing][44] is a process which will go through the data in the pool and
+verify (agains checksums) that it is correct or try to fix it if it is not.
+This should be done on a monthly basis and is triggered like this:
+
+```bash
+sudo zpool scrub pool1
+```
+
+This is very I/O intensive, so run this when there is little activity in your
+pool. Furthermore, it is possible to pause the scrub whenever you like (with the
+`-p` flag), and it will then resume from its latest checkpoint instead of the
+beginning when you ask for a scrub again. This way you can incrementally scrub
+you pool in case you have so much data it does not finish during its allotted
+time.
+
+#### Trimming
+If you have SSDs (or some other flash based storage) as your backing disks you
+should probably look into the [`trim`][42] command as this can help keep write
+speeds stable if you perform a lot of deleting and rewriting of data.
+
+You can enable the `autortim` property on each dataset, which will trigger small
+and quick trimming quite often, but it is also recommended that you run a
+proper `zpool trim` job [at the same frequency][31] as you scrub your pool.
+
+#### Snapshotting
+A very nice feature of ZFS is snapshoting, where you (almost) instantly create
+sort of a checkpoint in time of your data, and then you can roll back to it in
+case you accidentally removed something.
+
+There is a quick guide on how to do this manually [here][46], but the TL;DR of
+that one is basically the following two commands:
+
+**Create Snapshot**
+```
+sudo zfs snapshot pool1/media/movies@snapshot-name
+```
+
+[**List Snapshots**][53]
+```
+sudo zfs list -r -t snapshot pool1/media/movies
+```
+
+**Restore Snapshot**
+```
+sudo zfs rollback pool1/media/movies@snapshot-name
+```
+
+However, you should also look into the following two programs which are able
+to automate this process as well as clean up old snapshots.
+
+1. [sanoid](https://github.com/jimsalterjrs/sanoid)
+2. [zrepl](https://zrepl.github.io/)
+
+### Replace a disk
+
+Sooner or later you will reach a point where you need to replace a disk, and
+while [there][47] are [a lot][48] of [guides][49] out [there][50] I will add
+a small TL;DR with the same names as we have had in this guide up till now.
+
+We will be using the [`replace`][51] command to tell ZFS that it should replace
+the old drive with this new one:
+
+```bash
+sudo zpool replace rpool /dev/disk/by-uuid/<old_uuid> /dev/disk/by-uuid/<new_uuid>
+```
+
+The old path provided here is of course the same one we used when we first
+added this disk to the pool, but this can be one of the other possible
+[identifiers](#choose-a-good-disk-identifier) you have chosen. You can also
+use `zdb` to find and reference the disk by its [GUID][52] in case all else
+fails.
+
+ZFS will immediately try to resilver the array with this new disk, so wait
+patiently until that is done and monitor it so you know everything went well.
 
 # Additional Info
 
@@ -643,3 +1063,36 @@ into the [`combine`][5] filter or the [`merge_vars`][4] action plugin.
 [19]: https://www.howtogeek.com/465350/everything-you-ever-wanted-to-know-about-inodes-on-linux/
 [20]: https://unix.stackexchange.com/a/7965
 [21]: https://github.com/JonasAlfredsson/ansible-role-snapraid
+[22]: https://old.reddit.com/r/zfs/comments/gnzl6m/zfs_native_encryption_or_zfs_on_luks/fre4mf9/
+[23]: https://zfsonlinux.topicbox.com/groups/zfs-discuss/T154a5d1dad54570e-M84b984fca63d5c1cf94749bd/has-anyone-benchmarked-zfs-native-encryption-vs-zfs-on-luks
+[24]: https://docs.freebsd.org/en/books/handbook/zfs/#zfs-term
+[25]: https://www.usenix.org/system/files/login/articles/login_winter16_09_jude.pdf
+[26]: https://wiki.archlinux.org/title/ZFS#Bind_mount
+[27]: https://wiki.archlinux.org/title/ZFS
+[28]: https://arstechnica.com/information-technology/2020/05/zfs-101-understanding-zfs-storage-and-performance/
+[29]: https://www.xigmanas.com/wiki/doku.php?id=zfs:compression
+[30]: https://forum.level1techs.com/t/i-need-to-set-ashift-values-for-ssds-in-zfs-proxmox-what-value-smartctl-is-confusing/178414/2
+[31]: https://askubuntu.com/a/1200415
+[32]: https://wiki.archlinux.org/title/ZFS#Identify_disks
+[33]: https://wiki.archlinux.org/title/Persistent_block_device_naming#by-id_and_by-path
+[34]: https://docs.oracle.com/cd/E19253-01/819-5461/gaztn/index.html
+[35]: https://openzfs.github.io/openzfs-docs/man/7/zpoolprops.7.html
+[36]: https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html
+[37]: https://www.golinuxcloud.com/mount-filesystem-in-certain-order-systemd/
+[38]: https://www.thegeeksearch.com/how-to-manage-order-of-mounting-in-centos-rhel-78-using-systemd/
+[39]: https://www.freedesktop.org/software/systemd/man/systemd.mount.html
+[40]: https://www.freedesktop.org/software/systemd/man/systemd.generator.html
+[41]: http://www.raidz-calculator.com/raidz-types-reference.aspx
+[42]: https://openzfs.github.io/openzfs-docs/man/8/zpool-trim.8.html
+[43]: https://docs.oracle.com/cd/E19253-01/819-5461/gamno/index.html
+[44]: https://openzfs.github.io/openzfs-docs/man/8/zpool-scrub.8.html
+[45]: https://old.reddit.com/r/zfs/comments/ifhlb4/whats_your_favorite_monitoring_tool_for_zfs/
+[46]: https://ramsdenj.com/2016/08/29/arch-linux-on-zfs-part-3-followup.html
+[47]: https://docs.joyent.com/private-cloud/troubleshooting/disk-replacement
+[48]: https://www.adminbyaccident.com/freebsd/how-to-freebsd/how-to-replace-a-disk-on-a-zfs-mirror-pool/
+[49]: https://dannyda.com/2020/05/16/how-to-replace-dead-physical-disk-from-proxmox-pve-for-zfs-pool-easily/
+[50]: https://jordanelver.co.uk/blog/2018/11/26/how-to-replace-a-failed-disk-in-a-zfs-mirror/
+[51]: https://openzfs.github.io/openzfs-docs/man/8/zpool-replace.8.html
+[52]: https://askubuntu.com/questions/305830/replacing-a-dead-disk-in-a-zpool
+[53]: https://docs.oracle.com/cd/E19253-01/819-5461/gbiqe/index.html
+[54]: https://www.freedesktop.org/software/systemd/man/crypttab.html

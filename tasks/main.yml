@@ -15,6 +15,10 @@
   include: configure_mergerfs.yml
   when: mounts_pooled is defined
 
+- name: Install 'zfsutils' if any ZFS pools are present
+  include: install_zfs.yml
+  when: mounts_zfs is defined
+
 - name: Enable a specific mount point that is necessary in order to unlock encrypted drives
   include: cryptdisks_mount.yml
   when: mounts_cryptdisks is defined
@@ -36,3 +40,60 @@
     - Unlock encrypted drives
     - Mount drives
   when: mounts_encrypted is defined
+
+- name: Install service to make sure all encrypted drives are unlocked
+  become: true
+  template:
+    dest: "/etc/systemd/system/unlock-crypttab.service"
+    src: unlock-crypttab.service.j2
+  when: mounts_encrypted is defined
+
+- name: Enable crypttab unlocking service at boot
+  become: true
+  service:
+    name: unlock-crypttab.service
+    enabled: yes
+    state: started
+  when: mounts_encrypted is defined
+
+- name: Have ZFS depend on the crypttab unlocking service
+  block:
+    - name: Create folder for override configuration
+      become: true
+      file:
+        path: /etc/systemd/system/zfs-import-cache.service.d
+        owner: root
+        group: root
+        mode: '0755'
+        state: directory
+
+    # NOTE: This dependency might not be necessary since ZFS 2.1, since it
+    # appears like cryptsetup.target correctly includes these when they are
+    # needed by the zfs-import-cache.service.
+    - name: Add override configuration for zfs-import-cache.service
+      become: true
+      copy:
+        src: zfs-import-cache.override
+        dest: /etc/systemd/system/zfs-import-cache.service.d/override.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    # This change is done in order to break the link from local-fs.target to
+    # the zfs-mount.service as this would create a circular dependency when
+    # the encrypted disks had to wait the networking.service before they
+    # could be mounted after the root-keys.service had started.
+    # This just makes the ZFS disks a "remote" filesystem instead of a local one
+    # and will thus not be mounted before the network is up (which we want in
+    # this case).
+    # Furthermore, it does not appear that an .override file works as intended
+    # with removing Before= statements, so we need to replace the line instead.
+    - name: replace line
+      lineinfile:
+        path: /lib/systemd/system/zfs-mount.service
+        regexp: '^Before=local-fs.target$'
+        line: 'Before=remote-fs.target'
+        backrefs: yes
+      when: mounts_cryptdisks is defined
+
+  when: mounts_encrypted is defined and mounts_zfs is defined
