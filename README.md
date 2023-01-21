@@ -218,10 +218,13 @@ mounts_cryptdisks:
     password: "user_smb_pass"
     path: "/root/.smbcredentials"
   type: "cifs"
-  options: "vers=3.11,uid=root,gid=root,_netdev,noexec"
+  options: "vers=3.11,uid=root,gid=root,_netdev,noexec,seal"
   dump: 0
   pass: 0
 ```
+
+The [`seal`][56] option is to make sure the connection is encrypted, and should
+probably be present for this network mount.
 
 > Check out crazy setup of [Dexter Kane][55] to get a feeling of how this can
 > be used for an advanced setup where you have have to compromise two machines
@@ -1100,4 +1103,4 @@ into the [`combine`][5] filter or the [`merge_vars`][4] action plugin.
 [53]: https://docs.oracle.com/cd/E19253-01/819-5461/gbiqe/index.html
 [54]: https://www.freedesktop.org/software/systemd/man/crypttab.html
 [55]: https://forum.level1techs.com/t/dexter-kanes-ultra-paranoid-encrypted-nas-completed/98340
-
+[56]: https://github.com/JonasAlfredsson/ansible-role-samba_host#encrypted-connection

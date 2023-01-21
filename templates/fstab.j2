@@ -20,7 +20,7 @@
 {% if mounts_cryptdisks.uuid is defined %}
 UUID={{ mounts_cryptdisks.uuid }} {{ mounts_cryptdisks.mount_point }} {{ mounts_cryptdisks.type }} {{ mounts_cryptdisks.options | default('defaults,nofail') }} {{ mounts_cryptdisks.dump | default('0') }} {{ mounts_cryptdisks.pass | default('2') }}
 {% elif mounts_cryptdisks.net_path is defined %}
-{{ mounts_cryptdisks.net_path }} {{ mounts_cryptdisks.mount_point }} {{ mounts_cryptdisks.type }} {% if mounts_cryptdisks.net_credentials.path is defined %}credentials={{ mounts_cryptdisks.net_credentials.path }},{% endif %}{{ mounts_cryptdisks.options | default('_netdev,nofail') }} {{ mounts_cryptdisks.dump | default('0') }} {{ mounts_cryptdisks.pass | default('0') }}
+{{ mounts_cryptdisks.net_path }} {{ mounts_cryptdisks.mount_point }} {{ mounts_cryptdisks.type }} {% if mounts_cryptdisks.net_credentials.path is defined %}credentials={{ mounts_cryptdisks.net_credentials.path }},{% endif %}{{ mounts_cryptdisks.options | default('_netdev,nofail,seal') }} {{ mounts_cryptdisks.dump | default('0') }} {{ mounts_cryptdisks.pass | default('0') }}
 {% endif %}
 {% endif %}
 
