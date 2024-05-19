@@ -56,6 +56,8 @@
   ansible.builtin.fail:
     msg: "Pooled mount point '{{ item.item.mount_point }}' is not empty; please reboot in case you know something has changed"
   when: >
+    (item.stderr_lines | length>0 )
+    and
     ("fuse: mountpoint is not empty" in item.stderr_lines|first)
   loop: "{{ mount_pooled_drives.results }}"
   loop_control:
