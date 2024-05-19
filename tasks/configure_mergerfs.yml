@@ -1,12 +1,31 @@
 ---
+- name: Verify that we support the mergerfs version requested
+  ansible.builtin.fail:
+    msg: "This role only supports mergerfs versions >= 2.35.0"
+  when: mounts_mergerfs_version is version("2.35.0", '<')
+
+- name: Install 'fuse' to be able to mount pools via fstab
+  ansible.builtin.include_tasks: install_package.yml
+  vars:
+    package: fuse
+
 - name: Get the currently installed version of mergerfs
-  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs version: ([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
+  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs v([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
   check_mode: no
-  register: mergerfs_current_version # noqa no-changed-when
+  register: mergerfs_current_version
+  changed_when: false
   failed_when: >
-    (mergerfs_current_version.rc != 0)
-    and not
-    ("mergerfs: command not found" in mergerfs_current_version.stderr)
+    (
+      (mergerfs_current_version.rc != 0)
+      and not
+      ("mergerfs: command not found" in mergerfs_current_version.stderr)
+    )
+    or
+    (
+      (mergerfs_current_version.rc == 0)
+      and
+      (mergerfs_current_version.stdout == "")
+    )
 
 - name: Verify that the requested version of mergerfs is newer than the one installed
   block:

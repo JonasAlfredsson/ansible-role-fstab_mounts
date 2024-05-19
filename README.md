@@ -302,7 +302,7 @@ the defaults.
 ```yaml
 mounts_pooled:
   - name: ""
-    options: "defaults,allow_other,use_ino"
+    options: "cache.files=partial,dropcacheonclose=true,category.create=mfs"
     dump: 0
     pass: 0
     mount_point:  # Required

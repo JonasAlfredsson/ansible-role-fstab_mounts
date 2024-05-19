@@ -16,7 +16,7 @@
     package: cryptsetup
   when: mounts_encrypted is defined or mounts_cryptdisks is defined
 
-- name: Install 'mergerfs' if pooled drives are present
+- name: Install 'fuse' and 'mergerfs' if pooled drives are present
   ansible.builtin.include_tasks: configure_mergerfs.yml
   when: mounts_pooled is defined
 

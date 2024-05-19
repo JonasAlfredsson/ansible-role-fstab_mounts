@@ -58,6 +58,6 @@ UUID={{ mount.uuid }} {{ mount.mount_point }} {{ mount.type | default('ext4') }}
 {% for pool in mounts_pooled %}
 {% if pool.comment is defined %}# {{ pool.comment }}
 {% endif %}
-{{ pool.branches|join(':') }} {{ pool.mount_point }} fuse.mergerfs {% if pool.name is defined and pool.name != '' %}fsname={{ pool.name }},{% endif %}{{ pool.options | default('defaults,allow_other,use_ino') }} {{ pool.dump | default('0') }} {{ pool.pass | default('0') }}
+{{ pool.branches|join(':') }} {{ pool.mount_point }} fuse.mergerfs {% if pool.name is defined and pool.name != '' %}fsname={{ pool.name }},{% endif %}{{ pool.options | default('cache.files=partial,dropcacheonclose=true,category.create=mfs') }},lazy-umount-mountpoint=true {{ pool.dump | default('0') }} {{ pool.pass | default('0') }}
 {% endfor %}
 {% endif %}
