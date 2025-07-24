@@ -14,14 +14,29 @@
   when: not ansible_check_mode
 
 - name: Get infromation about the newly installed version of mergerfs
-  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs v([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
-  register: mergerfs_installed_version
-  check_mode: false
+  ansible.builtin.shell: "mergerfs --version"
+  check_mode: no
+  register: mergerfs_version
+  changed_when: false
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Extract only the version number from the output
+  ansible.builtin.set_fact:
+    mergerfs_installed_version: |-
+      {{-
+        mergerfs_version.stdout_lines | select('search', 'mergerfs v') | first |
+        regex_search('^\s*mergerfs v([0-9]+\.[0-9]+\.[0-9]+)\s*$', '\1') | first
+      -}}
+  when: not ansible_check_mode
+
+- ansible.builtin.set_fact:  # Dummy fact used when running with "--check".
+    mergerfs_installed_version: "{{ mounts_mergerfs_version }}"
+  when: ansible_check_mode
 
 - name: Verify that the correct version was installed
   ansible.builtin.fail:
-    msg: "mergerfs is reporting '{{ mergerfs_installed_version.stdout }}' as the installed version instead of the requested '{{ mounts_mergerfs_version }}'"
-  when: mergerfs_installed_version.stdout is not version(mounts_mergerfs_version, '==')
+    msg: "mergerfs is reporting '{{ mergerfs_installed_version }}' as the installed version instead of the requested '{{ mounts_mergerfs_version }}'"
+  when: mergerfs_installed_version is not version(mounts_mergerfs_version, '==')
   ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Remove .deb file

@@ -10,34 +10,42 @@
     package: fuse
 
 - name: Get the currently installed version of mergerfs
-  ansible.builtin.shell: "mergerfs --version | sed -rn 's/mergerfs v([0-9]+\\.[0-9]+\\.[0-9]+)$/\\1/p'" # noqa risky-shell-pipe
+  ansible.builtin.shell: "mergerfs --version"
   check_mode: no
-  register: mergerfs_current_version
+  register: mergerfs_version
   changed_when: false
   failed_when: >
     (
-      (mergerfs_current_version.rc != 0)
-      and not
-      ("mergerfs: command not found" in mergerfs_current_version.stderr)
+      (mergerfs_version.rc != 0) and not ("not found" in mergerfs_version.stderr)
     )
     or
     (
-      (mergerfs_current_version.rc == 0)
-      and
-      (mergerfs_current_version.stdout == "")
+      (mergerfs_version.rc == 0) and (mergerfs_version.stdout == "")
     )
+
+- name: Extract only the version number from the output
+  ansible.builtin.set_fact:
+    mergerfs_current_version: |-
+      {% if 'not found' in mergerfs_version.stderr %}
+      {{- '' -}}{# Return empty string in case of no mergerfs installed #}
+      {% else %}
+      {{-
+        mergerfs_version.stdout_lines | select('search', 'mergerfs v') | first |
+        regex_search('^\s*mergerfs v([0-9]+\.[0-9]+\.[0-9]+)\s*$', '\1') | first
+      -}}
+      {% endif %}
 
 - name: Verify that the requested version of mergerfs is newer than the one installed
   block:
     - ansible.builtin.fail:
-        msg: "The installed version of mergerfs ({{ mergerfs_current_version.stdout }}) is newer than the requested version ({{ mounts_mergerfs_version }})"
-      when: mergerfs_current_version.stdout is version(mounts_mergerfs_version, '>')
+        msg: "The installed version of mergerfs ({{ mergerfs_current_version }}) is newer than the requested version ({{ mounts_mergerfs_version }})"
+      when: mergerfs_current_version is version(mounts_mergerfs_version, '>')
 
     - name: Install new version of mergerfs
       ansible.builtin.include_tasks: install_mergerfs.yml
-      when: mergerfs_current_version.stdout is version(mounts_mergerfs_version, '<')
-  when: mergerfs_current_version.stdout != ''
+      when: mergerfs_current_version is version(mounts_mergerfs_version, '<')
+  when: mergerfs_current_version != ''
 
 - name: Install mergerfs
   ansible.builtin.include_tasks: install_mergerfs.yml
-  when: mergerfs_current_version.stdout == ''
+  when: mergerfs_current_version == ''
