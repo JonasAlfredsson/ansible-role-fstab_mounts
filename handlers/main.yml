@@ -1,4 +1,9 @@
 ---
+- name: Reload systemd to pick up changes to fstab
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  listen: Reload systemd
+
 - name: Unlock encrypted drives
   ansible.builtin.command: "cryptdisks_start {{ item.name | default(item.uuid) }}"
   with_items: "{{ mounts_encrypted }}"

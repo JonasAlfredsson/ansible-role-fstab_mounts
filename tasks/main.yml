@@ -36,6 +36,7 @@
     group: root
     mode: "0644"
   notify:
+    - Reload systemd
     - Mount drives
 
 - name: Push out the 'crypttab' file
@@ -46,6 +47,7 @@
     group: root
     mode: "0644"
   notify:
+    - Reload systemd
     - Unlock encrypted drives
     - Mount drives
   when: mounts_encrypted is defined
